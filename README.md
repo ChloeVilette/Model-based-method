@@ -41,7 +41,7 @@ In this example we use a grooming dataset and we are intesrested in direction of
 
     # Create an edgelist
 
-  edgelist.id <- netTS::create.an.edgeList(subset.id [,c("ID", "Partner")]
+  edgelist.id <- netTS::create.an.edgeList(subset.id [,c("ID", "Partner")])
 
     # Run the function 
 
