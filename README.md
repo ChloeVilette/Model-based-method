@@ -57,6 +57,7 @@ In this example we use a grooming dataset and we are intesrested in direction of
     # Re-attribute partners to the corresponding weights
 
   edgelist.id <- edgelist.id[order(edgelist.id$weight),]
+  
   strong.ties <-cbind(strong.ties,edgelist.id)
   
 
