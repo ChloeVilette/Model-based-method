@@ -1,0 +1,13 @@
+flat_mbm_function.Rmd:
+  path: dev/flat_mbm_function.Rmd
+  state: active
+  R: R/create_stan_model.R
+  tests: tests/testthat/test-create_stan_model.R
+  vignettes: vignettes/get-started.Rmd
+  inflate:
+    flat_file: dev/flat_mbm_function.Rmd
+    vignette_name: Get started
+    open_vignette: true
+    check: true
+    document: true
+    overwrite: ask
