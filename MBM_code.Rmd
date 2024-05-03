@@ -1,0 +1,1936 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+## TESTS FOR STRONG TIE FUNCTION PAPER ##
+
+  #Load libraries
+  
+```{r}
+devtools::install_github("tbonne/netTS")
+devtools::install_github("ChloeVilette/Model-based-method")
+library(netTS)
+library(dplyr)
+library(dbscan)
+library(igraph)
+library(ggplot2)
+library(brms)
+library(rstan)
+library(gridExtra)
+library(lubridate)
+library(scales)
+library(strongTies)
+```
+
+  # Create a simulated data set that will be used later
+  
+```{r}
+# Create a data set
+simulated.df<-sim.events.data(50, 100,20)
+simulated.data<-simulated.df$beha
+simulated.data<-simulated.data[,c(1:2)]
+```
+
+PART 1: PERFORMANCE
+
+# TRUE POSITIVE TEST
+
+  # Small dataset
+
+```{r}
+test1_true_s1 = data.frame() 
+sample_size = seq(1,9, by=1)
+
+for (i in sample_size){
+  
+  for(j in 1:20){
+    
+    weights = round(abs(rnorm(i,2,1))) #all ties come from a normal distribution (no strong ties!)
+    weights[length(weights)+1] <- 10 #this weight is 3 sd away from the mean (it's the strong tie!)
+    
+    strong_ties<- model_based_extraction(weights, sd_diff=0, min_diff=1, model_backend="rstan")
+    
+    test1_true_s1 <- dplyr::bind_rows(test1_true_s1, data.frame(strong = sum(strong_ties$strong)==1, sample_size=i+1))
+    gc()
+    
+    
+  }
+}
+df_test1_true_s1 <- test1_true_s1%>% group_by(sample_size) %>% dplyr::summarise(per_true_pos = sum(strong)/20)
+
+
+theme_set(theme_bw())
+plot1<-ggplot(df_test1_true_s1, aes(y=per_true_pos, x=sample_size) ) + geom_point(size=2) + scale_color_manual(values=c("black"))+ylim(0,1)+ scale_x_continuous(limits = c(2, 10), breaks = seq(2,10, by=1)) + theme( panel.grid.minor = element_blank(),axis.line.x = element_line(colour = 'black', size=0.4, linetype='solid'),  axis.line.y = element_line(colour = 'black', size=0.4, linetype='solid'),axis.text=element_text(size=14), axis.title=element_text(size=14)) + labs(x="Sample size", y = "Rate of true positives", tag="(a)")
+
+# Size up
+pngfile <- fs::path(knitr::fig_path(),  "basis.png")
+ragg::agg_png(pngfile, width = 15, height = 10, units = "cm", res = 300)
+plot(plot1)
+invisible(dev.off())
+knitr::include_graphics(pngfile)
+
+```
+
+  # Big dataset
+
+```{r}
+test1_true_b = data.frame()
+
+sample_size = seq(14,59, by=5)
+
+for (i in sample_size){
+  
+  for(j in 1:20){
+    
+    weights = round(abs(rnorm(i,2,1))) #all ties come from a normal distribution (no strong ties!)
+    weights[length(weights)+1] <- 10 #this weight is 3 sd away from the mean (it's the strong tie!)
+    
+    strong_ties<- model_based_extraction(weights, sd_diff=0, min_diff=3, model_backend="rstan")
+    
+    test1_true_b <- dplyr::bind_rows(test1_true_b, data.frame(strong = sum(strong_ties$strong)==1, sample_size=i+1))
+    gc()
+    
+  }
+}
+
+df_test1_true_b <- test1_true_b %>% group_by(sample_size) %>% dplyr::summarise(per_true_pos = sum(strong)/20)
+
+theme_set(theme_bw())
+plot2<-ggplot(df_test1_true_b, aes(y=per_true_pos, x=sample_size) ) + geom_point(size=2) + scale_color_manual(values=c("black")) + ylim(0,1)+ scale_x_continuous(limits = c(15, 60), breaks = seq(15,60, by=5)) + theme( panel.grid.minor = element_blank(),axis.line.x = element_line(colour = 'black', size=0.4, linetype='solid'),  axis.line.y = element_line(colour = 'black', size=0.4, linetype='solid'),axis.text=element_text(size=14), axis.title=element_text(size=14)) + labs(x="Sample size", y = "Rate of true positives", tag = "(b)")
+
+```
+
+  # Combine both plots
+```{r}
+grid.arrange(plot1, plot2, ncol=2) # 10 and 4.25 pdf size
+```
+  
+# FALSE POSITIVE TEST
+
+  # Small dataset
+
+```{r}
+test1_false_s = data.frame()
+
+sample_size = seq(2,10, by=1)
+
+for (i in sample_size){
+  
+  for(j in 1:20){
+    
+    weights = round(abs(rnorm(i,2,1))) # all ties come from a normal distribution (no strong ties!)
+    weights[weights==0]<-1
+    
+    strong_ties<- model_based_extraction(weights, sd_diff=0, min_diff=1, model_backend="rstan")
+    test1_false_s <- bind_rows(test1_false_s, data.frame(strong = sum(strong_ties$strong)>=1, sample_size=i))
+    gc()
+  }
+}
+
+df_test1_false_s <- test1_false_s %>% group_by(sample_size) %>% dplyr::summarise(per_false_pos = sum(strong)/20)
+
+theme_set(theme_bw())
+plot1s<-ggplot(df_test1_false_s, aes(y=per_false_pos, x=sample_size) ) + geom_point(size=2) + scale_color_manual(values=c("black"))+ ylim(0,1)+ scale_x_continuous(limits = c(2, 10), breaks = seq(2,10, by=1)) + theme( panel.grid.minor = element_blank(),axis.line.x = element_line(colour = 'black', size=0.4, linetype='solid'),  axis.line.y = element_line(colour = 'black', size=0.4, linetype='solid'),axis.text=element_text(size=14), axis.title=element_text(size=14)) + labs(x="Sample size", y = "Rate of false positives", tag="(a)")
+
+```
+
+  # Big dataset
+
+```{r}
+test1_false_b = data.frame()
+
+sample_size = seq(15,60, by=5)
+
+for (i in sample_size){
+  
+  for(j in 1:20){
+    
+    weights = round(abs(rnorm(i,2,1))) #all ties come from a normal distribution (no strong ties!)
+    weights[weights==0]<-1
+    
+    strong_ties<- model_based_extraction(weights, sd_diff=0, min_diff=3, model_backend="rstan")
+    test1_false_b <- bind_rows(test1_false_b, data.frame(strong = sum(strong_ties$strong)>=1, sample_size=i))
+    gc()
+  }
+}
+
+df_test1_false_b <- test1_false_b %>% group_by(sample_size) %>% dplyr::summarise(per_false_pos = sum(strong)/20)
+
+theme_set(theme_bw())
+plot2b<-ggplot(df_test1_false_b, aes(y=per_false_pos, x=sample_size) ) + geom_point(size=2) + scale_color_manual(values=c("black")) +ylim(0,1)+ scale_x_continuous(limits = c(15, 60), breaks = seq(15,60, by=5)) + theme( panel.grid.minor = element_blank(),axis.line.x = element_line(colour = 'black', size=0.4, linetype='solid'),  axis.line.y = element_line(colour = 'black', size=0.4, linetype='solid'),axis.text=element_text(size=14), axis.title=element_text(size=14)) + labs(x="Sample size", y = "Rate of false positives", tag="(b)")+  geom_point(size=2)
+```
+
+  # Combined plots
+  
+```{r}
+grid.arrange(plot1s, plot2b, ncol=2)
+```
+  
+PART 2:	SENSITIVITY ANALYSIS
+
+# PRIORS TEST
+
+To load the different tested functions, they are at the bottom of the code page.
+
+  # TRUE POSITIVE TEST
+
+    # Small dataset
+
+```{r}
+test2_prior_def = data.frame() 
+test2_prior_b= data.frame() 
+test2_prior_inter= data.frame() 
+
+sample_size = seq(1,9, by=1)
+
+for (i in sample_size){
+  
+  for(j in 1:20){
+    
+    weights = round(abs(rnorm(i,2,1)))
+    weights[length(weights)+1] <- 10
+    
+    strong_ties_def<- model_based_extraction(weights, sd_diff=0, min_diff=1, model_backend="rstan")
+    test2_prior_def <- dplyr::bind_rows(test2_prior_def, data.frame(strong = sum(strong_ties_def$strong)==1, sample_size=i+1))
+    
+    strong_ties_b<- model_based_strong_ties_b(weights, sd_diff=0, min_diff=1, model_backend="rstan", normal_model_base, skewnormal_model_base, poisson_model_base,poisson_model_label)
+    test2_prior_b <- dplyr::bind_rows(test2_prior_b, data.frame(strong = sum(strong_ties_b$strong)==1, sample_size=i+1))
+    
+    strong_ties_inter<- model_based_strong_ties_inter(weights, sd_diff=0, min_diff=1, model_backend="rstan", normal_model_base, skewnormal_model_base, poisson_model_base,poisson_model_label)
+    test2_prior_inter <- dplyr::bind_rows(test2_prior_inter, data.frame(strong = sum(strong_ties_inter$strong)==1, sample_size=i+1))
+    
+  }
+}
+
+df_test2_def <- test2_prior_def%>% group_by(sample_size) %>% dplyr::summarise(per_true_pos = sum(strong)/20)
+df_test2_def$priors<-0
+df_test2_b <- test2_prior_b%>% group_by(sample_size) %>% dplyr::summarise(per_true_pos = sum(strong)/20)
+df_test2_b$priors<-1
+df_test2_inter <- test2_prior_inter%>% group_by(sample_size) %>% dplyr::summarise(per_true_pos = sum(strong)/20)
+df_test2_inter$priors<-2
+
+small.prior.test2<- rbind(df_test2_def,df_test2_b,df_test2_inter)
+small.prior.test2$priors<-as.factor(small.prior.test2$priors)
+
+theme_set(theme_bw())
+plot.prior.s2<-ggplot(small.prior.test2, aes(y=per_true_pos, x=sample_size, group=priors, color=priors, shape = priors, size = priors) ) + geom_point(alpha=0.6, aes(size=priors),stroke = 1) + scale_color_manual(values=c("black","green", "orange")) + ylim(0,1)+ scale_x_continuous(limits = c(2, 10), breaks = seq(2,10, by=1)) + theme( panel.grid.minor = element_blank(),axis.line.x = element_line(colour = 'black', size=0.4, linetype='solid'),  axis.line.y = element_line(colour = 'black', size=0.4, linetype='solid'),axis.text=element_text(size=14), axis.title=element_text(size=14)) + labs(x="Sample size", y = "Rate of true positives", tag="(a)")
+
+```
+
+    # Big dataset
+
+```{r}
+test2_prior_def_b = data.frame() 
+test2_prior_b_b= data.frame() 
+test2_prior_inter_b= data.frame() 
+
+sample_size = seq(14,59, by=5)
+
+for (i in sample_size){
+  
+  for(j in 1:20){
+    
+    weights = round(abs(rnorm(i,2,1)))
+    weights[length(weights)+1] <- 10
+    
+    strong_ties_def<- model_based_extraction(weights, sd_diff=0, min_diff=3, model_backend="rstan")
+    test2_prior_def_b <- dplyr::bind_rows(test2_prior_def_b, data.frame(strong = sum(strong_ties_def$strong)==1, sample_size=i+1))
+    
+    strong_ties_b<- model_based_strong_ties_b(weights, sd_diff=0, min_diff=3, model_backend="rstan", normal_model_base, skewnormal_model_base, poisson_model_base,poisson_model_label)
+    test2_prior_b_b <- dplyr::bind_rows(test2_prior_b_b, data.frame(strong = sum(strong_ties_b$strong)==1, sample_size=i+1))
+    
+    strong_ties_inter_b<- model_based_strong_ties_inter(weights, sd_diff=0, min_diff=3, model_backend="rstan", normal_model_base, skewnormal_model_base, poisson_model_base, poisson_model_label)
+    test2_prior_inter_b <- dplyr::bind_rows(test2_prior_inter_b, data.frame(strong = sum(strong_ties_inter_b$strong)==1, sample_size=i+1))
+    
+  }
+}
+
+df_test2_def_b <- test2_prior_def_b%>% group_by(sample_size) %>% dplyr::summarise(per_true_pos = sum(strong)/20)
+df_test2_def_b$priors<-0
+df_test2_b2 <- test2_prior_b_b%>% group_by(sample_size) %>% dplyr::summarise(per_true_pos = sum(strong)/20)
+df_test2_b2$priors<-1
+df_test2_inter_b <- test2_prior_inter_b%>% group_by(sample_size) %>% dplyr::summarise(per_true_pos = sum(strong)/20)
+df_test2_inter_b$priors<-2
+
+big.prior.test2<- rbind(df_test2_def_b,df_test2_b2 ,df_test2_inter_b)
+big.prior.test2$priors<-as.factor(big.prior.test2$priors)
+
+theme_set(theme_bw())
+plot.prior.b2<-ggplot(big.prior.test2, aes(y=per_true_pos, x=sample_size, group=priors, color=priors, shape = priors, size = priors) ) + geom_point(alpha=0.6, aes(size=priors),stroke = 1) + scale_color_manual(values=c("black","green", "orange")) + ylim(0,1)+ scale_x_continuous(limits = c(15, 60), breaks = seq(15,60, by=5)) + theme( panel.grid.minor = element_blank(),axis.line.x = element_line(colour = 'black', size=0.4, linetype='solid'),  axis.line.y = element_line(colour = 'black', size=0.4, linetype='solid'),axis.text=element_text(size=14), axis.title=element_text(size=14)) + labs(x="Sample size", y = "Rate of true positives", tag="(b)") 
+```
+
+  # combine plots
+  
+```{r}
+grid.arrange(plot.prior.s2,plot.prior.b2, ncol=2)
+```
+  
+  #  FALSE POSITIVE
+
+    # Small dataset
+
+```{r}
+test2_prior_def_f = data.frame() 
+test2_prior_b_f = data.frame() 
+test2_prior_inter_f = data.frame() 
+
+sample_size = seq(1,9, by=1)
+
+for (i in sample_size){
+  
+  for(j in 1:20){
+    
+    weights = round(abs(rnorm(i,2,1))) #all ties come from a normal distribution (no strong ties!)
+    weights[length(weights)+1]<-1
+    
+    strong_ties_def<- model_based_extraction(weights, sd_diff=0, min_diff=1, model_backend="rstan")
+    test2_prior_def_f <- dplyr::bind_rows(test2_prior_def_f, data.frame(strong = sum(strong_ties_def$strong)==1, sample_size=i+1))
+    
+    strong_ties_b<- model_based_strong_ties_b(weights, sd_diff=0, min_diff=1, model_backend="rstan", normal_model_base, skewnormal_model_base, poisson_model_base,poisson_model_label)
+    test2_prior_b_f <- dplyr::bind_rows(test2_prior_b_f, data.frame(strong = sum(strong_ties_b$strong)==1, sample_size=i+1))
+    
+    strong_ties_inter<- model_based_strong_ties_inter(weights, sd_diff=0, min_diff=1, model_backend="rstan", normal_model_base, skewnormal_model_base, poisson_model_base,poisson_model_label)
+    test2_prior_inter_f <- dplyr::bind_rows(test2_prior_inter_f, data.frame(strong = sum(strong_ties_inter$strong)==1, sample_size=i+1))
+    
+    gc()
+    
+  }
+}
+
+df_test2_def_f <- test2_prior_def_f%>% group_by(sample_size) %>% dplyr::summarise(per_true_pos = sum(strong)/20)
+df_test2_def_f$priors<-0
+df_test2_b_f <- test2_prior_b_f%>% group_by(sample_size) %>% dplyr::summarise(per_true_pos = sum(strong)/20)
+df_test2_b_f$priors<-1
+df_test2_inter_f <- test2_prior_inter_f%>% group_by(sample_size) %>% dplyr::summarise(per_true_pos = sum(strong)/20)
+df_test2_inter_f$priors<-2
+
+small.prior.test2.f<- rbind(df_test2_def_b,df_test2_b_f,df_test2_inter_f)
+small.prior.test2.f$priors<-as.factor(small.prior.test2.f$priors)
+
+theme_set(theme_bw())
+plot.prior.s.false2<-ggplot(small.prior.test2.f, aes(y=per_true_pos, x=sample_size, group=priors, color=priors, shape = priors, size = priors) ) + geom_point(alpha=0.6, aes(size=priors),stroke = 1) + scale_color_manual(values=c("black","green", "orange")) + ylim(0,1)+ scale_x_continuous(limits = c(2, 10), breaks = seq(2,10, by=1)) + theme( panel.grid.minor = element_blank(),axis.line.x = element_line(colour = 'black', size=0.4, linetype='solid'),  axis.line.y = element_line(colour = 'black', size=0.4, linetype='solid'),axis.text=element_text(size=14), axis.title=element_text(size=14)) + labs(x="Sample size", y = "Rate of false positives", tag="(a)")
+
+```
+
+    # Big dataset
+
+```{r}
+test2_prior_def_fb = data.frame() 
+test2_prior_b_fb= data.frame() 
+test2_prior_inter_fb= data.frame() 
+
+sample_size = seq(14,59, by=5)
+
+for (i in sample_size){
+  
+  for(j in 1:20){
+    
+    weights = round(abs(rnorm(i,2,1)))
+    weights[length(weights)+1] <- 1
+    
+    strong_ties_def<- model_based_extraction(weights, sd_diff=0, min_diff=3, model_backend="rstan")
+    test2_prior_def_fb <- dplyr::bind_rows(test2_prior_def_fb, data.frame(strong = sum(strong_ties_def$strong)==1, sample_size=i+1))
+    
+    strong_ties_b<- model_based_strong_ties_b(weights, sd_diff=0, min_diff=3, model_backend="rstan", normal_model_base, skewnormal_model_base, poisson_model_base,poisson_model_label)
+    test2_prior_b_fb <- dplyr::bind_rows(test2_prior_b_fb, data.frame(strong = sum(strong_ties_b$strong)==1, sample_size=i+1))
+    
+    strong_ties_inter_b<- model_based_strong_ties_inter(weights, sd_diff=0, min_diff=3, model_backend="rstan", normal_model_base, skewnormal_model_base, poisson_model_base, poisson_model_label)
+    test2_prior_inter_fb <- dplyr::bind_rows(test2_prior_inter_fb, data.frame(strong = sum(strong_ties_inter_b$strong)==1, sample_size=i+1))
+    
+  }
+}
+
+df_test2_def_fb <- test2_prior_def_fb%>% group_by(sample_size) %>% dplyr::summarise(per_true_pos = sum(strong)/20)
+df_test2_def_fb$priors<-0
+df_test2_fb2 <- test2_prior_b_fb%>% group_by(sample_size) %>% dplyr::summarise(per_true_pos = sum(strong)/20)
+df_test2_fb2$priors<-1
+df_test2_inter_fb <- test2_prior_inter_fb%>% group_by(sample_size) %>% dplyr::summarise(per_true_pos = sum(strong)/20)
+df_test2_inter_fb$priors<-2
+
+big.prior.test.f2<- rbind(df_test2_def_fb,df_test2_fb2 ,df_test2_inter_fb)
+big.prior.test.f2$priors<-as.factor(big.prior.test.f2$priors)
+
+theme_set(theme_bw())
+plot.prior.b.false2<-ggplot(big.prior.test.f2, aes(y=per_true_pos, x=sample_size, group=priors, color=priors, shape = priors, size = priors) ) + geom_point(alpha=0.6, aes(size=priors),stroke = 1) + scale_color_manual(values=c("black","green", "orange")) + ylim(0,1)+ scale_x_continuous(limits = c(15, 60), breaks = seq(15,60, by=5)) + theme( panel.grid.minor = element_blank(),axis.line.x = element_line(colour = 'black', size=0.4, linetype='solid'),  axis.line.y = element_line(colour = 'black', size=0.4, linetype='solid'),axis.text=element_text(size=14), axis.title=element_text(size=14)) + labs(x="Sample size", y = "Rate of false positives", tag="(b)") 
+```
+
+  # Combine plots
+
+```{r}
+grid.arrange(plot.prior.s.false2,plot.prior.b.false2, ncol=2)
+```
+
+# MIN_DIFF TEST
+
+  # TRUE POSITIVE
+
+    # Small dataset
+
+```{r}
+test2_true_s1 = data.frame() # min_diff is set at 1 
+test2_true_s2 = data.frame() # min_diff is set at 2
+test2_true_s3 = data.frame() # min_diff is set at 3
+test2_true_s4 = data.frame() # min_diff is set at 4 
+test2_true_s5 = data.frame() # min_diff is set at 5 
+
+sample_size = seq(1,9, by=1)
+
+for (i in sample_size){
+  
+  for(j in 1:20){
+    
+    weights = round(abs(rnorm(i,2,1))) #all ties come from a normal distribution (no strong ties!)
+    weights[length(weights)+1] <- 10
+    
+    strong_ties1<- model_based_extraction(weights, sd_diff=0, min_diff=1, model_backend="rstan")
+    test2_true_s1 <- dplyr::bind_rows(test2_true_s1, data.frame(strong = sum(strong_ties1$strong)==1, sample_size=i+1))
+    
+    strong_ties2<- model_based_extraction(weights, sd_diff=0, min_diff=2, model_backend="rstan")
+    test2_true_s2 <- dplyr::bind_rows(test2_true_s2, data.frame(strong = sum(strong_ties2$strong)==1, sample_size=i+1))
+    
+    strong_ties3<- model_based_extraction(weights, sd_diff=0, min_diff=3, model_backend="rstan")
+    test2_true_s3 <- dplyr::bind_rows(test2_true_s3, data.frame(strong = sum(strong_ties3$strong)==1, sample_size=i+1))
+    
+    strong_ties4<- model_based_extraction(weights, sd_diff=0, min_diff=4, model_backend="rstan")
+    test2_true_s4 <- dplyr::bind_rows(test2_true_s4, data.frame(strong = sum(strong_ties4$strong)==1, sample_size=i+1))
+    
+    strong_ties5<- model_based_extraction(weights, sd_diff=0, min_diff=5, model_backend="rstan")
+    test2_true_s5 <- dplyr::bind_rows(test2_true_s5, data.frame(strong = sum(strong_ties5$strong)==1, sample_size=i+1))
+    
+    gc()
+    
+  }
+}
+
+df_test2_true_s0 <- test2_true_s0%>% group_by(sample_size) %>% dplyr::summarise(per_true_pos = sum(strong)/20)
+df_test2_true_s0$min_diff<-0
+df_test2_true_s1 <- test2_true_s1%>% group_by(sample_size) %>% dplyr::summarise(per_true_pos = sum(strong)/20)
+df_test2_true_s1$min_diff<-1
+df_test2_true_s2 <- test2_true_s2%>% group_by(sample_size) %>% dplyr::summarise(per_true_pos = sum(strong)/20)
+df_test2_true_s2$min_diff<-2
+df_test2_true_s3 <- test2_true_s3%>% group_by(sample_size) %>% dplyr::summarise(per_true_pos = sum(strong)/20)
+df_test2_true_s3$min_diff<-3
+df_test2_true_s4 <- test2_true_s4%>% group_by(sample_size) %>% dplyr::summarise(per_true_pos = sum(strong)/20)
+df_test2_true_s4$min_diff<-4
+df_test2_true_s5 <- test2_true_s5%>% group_by(sample_size) %>% dplyr::summarise(per_true_pos = sum(strong)/20)
+df_test2_true_s5$min_diff<-5
+
+small.true.test2<- rbind(df_test2_true_s1,df_test2_true_s2,df_test2_true_s3,df_test2_true_s4,df_test2_true_s5)
+small.true.test2$min_diff<-as.factor(small.true.test2$min_diff)
+
+theme_set(theme_bw())
+plot.s2<-ggplot(small.true.test2, aes(y=per_true_pos, x=sample_size, group=min_diff, color=min_diff, shape = min_diff, size = min_diff) ) + geom_point(alpha=0.6, aes(size=min_diff),stroke = 1) + scale_color_manual(values=c("sienna4","purple", "blue","firebrick3", "yellowgreen")) + ylim(0,1)+ scale_x_continuous(limits = c(2, 10), breaks = seq(2,10, by=1)) + theme( panel.grid.minor = element_blank(),axis.line.x = element_line(colour = 'black', size=0.4, linetype='solid'),  axis.line.y = element_line(colour = 'black', size=0.4, linetype='solid'),axis.text=element_text(size=14), axis.title=element_text(size=14)) + labs(x="Sample size", y = "Rate of true positives", tag="(a)")
+```
+
+    # Big dataset
+
+```{r}
+test2_true_b1 = data.frame() # min_diff is set at 1 
+test2_true_b2 = data.frame() # min_diff is set at 2
+test2_true_b3 = data.frame() # min_diff is set at 3
+test2_true_b4 = data.frame() # min_diff is set at 4 
+test2_true_b5 = data.frame() # min_diff is set at 5 
+
+sample_size = seq(14,59, by=5)
+
+for (i in sample_size){
+  
+  for(j in 1:20){
+    
+    weights = round(abs(rnorm(i,2,1)))
+    weights[length(weights)+1] <- 10
+    
+    strong_ties1<- model_based_extraction(weights, sd_diff=0, min_diff=1, model_backend="rstan")
+    test2_true_b1 <- dplyr::bind_rows(test2_true_b1, data.frame(strong = sum(strong_ties1$strong)==1, sample_size=i+1))
+    
+    strong_ties2<- model_based_extraction(weights, sd_diff=0, min_diff=2, model_backend="rstan")
+    test2_true_b2 <- dplyr::bind_rows(test2_true_b2, data.frame(strong = sum(strong_ties2$strong)==1, sample_size=i+1))
+    
+    strong_ties3<- model_based_extraction(weights, sd_diff=0, min_diff=3, model_backend="rstan")
+    test2_true_b3 <- dplyr::bind_rows(test2_true_b3, data.frame(strong = sum(strong_ties3$strong)==1, sample_size=i+1))
+    
+    strong_ties4<- model_based_extraction(weights, sd_diff=0, min_diff=4, model_backend="rstan")
+    test2_true_b4 <- dplyr::bind_rows(test2_true_b4, data.frame(strong = sum(strong_ties4$strong)==1, sample_size=i+1))
+    
+    strong_ties5<- model_based_extraction(weights, sd_diff=0, min_diff=5, model_backend="rstan")
+    test2_true_b5 <- dplyr::bind_rows(test2_true_b5, data.frame(strong = sum(strong_ties5$strong)==1, sample_size=i+1))
+    
+    gc()
+    
+  }
+}
+
+df_test2_true_b1 <- test2_true_b1%>% group_by(sample_size) %>% dplyr::summarise(per_true_pos = sum(strong)/20)
+df_test2_true_b1$min_diff<-1
+df_test2_true_b2 <- test2_true_b2%>% group_by(sample_size) %>% dplyr::summarise(per_true_pos = sum(strong)/20)
+df_test2_true_b2$min_diff<-2
+df_test2_true_b3 <- test2_true_b3%>% group_by(sample_size) %>% dplyr::summarise(per_true_pos = sum(strong)/20)
+df_test2_true_b3$min_diff<-3
+df_test2_true_b4 <- test2_true_b4%>% group_by(sample_size) %>% dplyr::summarise(per_true_pos = sum(strong)/20)
+df_test2_true_b4$min_diff<-4
+df_test2_true_b5 <- test2_true_b5%>% group_by(sample_size) %>% dplyr::summarise(per_true_pos = sum(strong)/20)
+df_test2_true_b5$min_diff<-5
+
+big.true.test2<- rbind(df_test2_true_b1,df_test2_true_b2,df_test2_true_b3,df_test2_true_b4,df_test2_true_b5)
+big.true.test2$min_diff<-as.factor(big.true.test2$min_diff)
+
+theme_set(theme_bw())
+plot.b2<-ggplot(big.true.test2, aes(y=per_true_pos, x=sample_size, group=min_diff, color=min_diff, shape = min_diff, size = min_diff) ) + geom_point(alpha=0.6, aes(size=min_diff),stroke = 1) + scale_color_manual(values=c("sienna4","purple", "blue","firebrick3", "yellowgreen"))+ ylim(0,1)+ theme( panel.grid.minor = element_blank(),axis.line.x = element_line(colour = 'black', size=0.4, linetype='solid'),  axis.line.y = element_line(colour = 'black', size=0.4, linetype='solid'),axis.text=element_text(size=14), axis.title=element_text(size=14)) + labs(x="Sample size", y = "Rate of true positives", tag="(b)")
+```
+
+  # Combine plots
+  
+```{r}
+grid.arrange(plot.s2,plot.b2, ncol=2)
+```
+
+  # FALSE POSITIVE
+
+    # Small dataset
+
+```{r}
+test2_false_s1 = data.frame() # min_diff is set at 1 
+test2_false_s2 = data.frame() # min_diff is set at 2
+test2_false_s3 = data.frame() # min_diff is set at 3
+test2_false_s4 = data.frame() # min_diff is set at 4 
+test2_false_s5 = data.frame() # min_diff is set at 5 
+
+sample_size = seq(2,10, by=1)
+
+for (i in sample_size){
+  
+  for(j in 1:20){
+    
+    weights = round(abs(rnorm(i,2,1)))
+    weights[weights==0]<-1
+    
+    strong_ties1<- model_based_extraction(weights, sd_diff=0, min_diff=1, model_backend="rstan")
+    test2_false_s1 <- dplyr::bind_rows(test2_false_s1, data.frame(strong = sum(strong_ties1$strong)==1, sample_size=i))
+    
+    strong_ties2<- model_based_extraction(weights, sd_diff=0, min_diff=2, model_backend="rstan")
+    test2_false_s2 <- dplyr::bind_rows(test2_false_s2, data.frame(strong = sum(strong_ties2$strong)==1, sample_size=i))
+    
+    strong_ties3<- model_based_extraction(weights, sd_diff=0, min_diff=3, model_backend="rstan")
+    test2_false_s3 <- dplyr::bind_rows(test2_false_s3, data.frame(strong = sum(strong_ties3$strong)==1, sample_size=i))
+    
+    strong_ties4<- model_based_extraction(weights, sd_diff=0, min_diff=4, model_backend="rstan")
+    test2_false_s4 <- dplyr::bind_rows(test2_false_s4, data.frame(strong = sum(strong_ties4$strong)==1, sample_size=i))
+    
+    strong_ties5<- model_based_extraction(weights, sd_diff=0, min_diff=5, model_backend="rstan")
+    test2_false_s5 <- dplyr::bind_rows(test2_false_s5, data.frame(strong = sum(strong_ties5$strong)==1, sample_size=i))
+    
+    gc()
+    
+  }
+}
+
+df_test2_false_s1 <- test2_false_s1%>% group_by(sample_size) %>% dplyr::summarise(per_false_pos = sum(strong)/20)
+df_test2_false_s1$min_diff<-1
+df_test2_false_s2 <- test2_false_s2%>% group_by(sample_size) %>% dplyr::summarise(per_false_pos = sum(strong)/20)
+df_test2_false_s2$min_diff<-2
+df_test2_false_s3 <- test2_false_s3%>% group_by(sample_size) %>% dplyr::summarise(per_false_pos = sum(strong)/20)
+df_test2_false_s3$min_diff<-3
+df_test2_false_s4 <- test2_false_s4%>% group_by(sample_size) %>% dplyr::summarise(per_false_pos = sum(strong)/20)
+df_test2_false_s4$min_diff<-4
+df_test2_false_s5 <- test2_false_s5%>% group_by(sample_size) %>% dplyr::summarise(per_false_pos = sum(strong)/20)
+df_test2_false_s5$min_diff<-5
+
+small.false.test2<-rbind(df_test2_false_s1,df_test2_false_s2,df_test2_false_s3,df_test2_false_s4,df_test2_false_s5)
+small.false.test2$min_diff<-as.factor(small.false.test2$min_diff)
+
+theme_set(theme_bw())
+plot.f.s2<-ggplot(small.false.test2, aes(y=per_false_pos, x=sample_size, group=min_diff, color=min_diff, shape = min_diff, size = min_diff) ) + geom_point(alpha=0.6, aes(size=min_diff),stroke = 1) + scale_color_manual(values=c("sienna4","purple", "blue","firebrick3", "yellowgreen"))+ ylim(0,1)+ scale_x_continuous(limits = c(2, 10), breaks = seq(2,10, by=1)) + theme( panel.grid.minor = element_blank(),axis.line.x = element_line(colour = 'black', size=0.4, linetype='solid'),  axis.line.y = element_line(colour = 'black', size=0.4, linetype='solid'),axis.text=element_text(size=14), axis.title=element_text(size=14)) + labs(x="Sample size", y = "Rate of false positives", tag="(a)")
+
+```
+
+    # Big dataset
+
+```{r}
+test2_false_b1 = data.frame() # min_diff is set at 1 
+test2_false_b2 = data.frame() # min_diff is set at 2
+test2_false_b3 = data.frame() # min_diff is set at 3
+test2_false_b4 = data.frame() # min_diff is set at 4 
+test2_false_b5 = data.frame() # min_diff is set at 5 
+
+sample_size = seq(15,60, by=5)
+
+for (i in sample_size){
+  
+  for(j in 1:20){
+    
+    weights = round(abs(rnorm(i,2,1)))
+    weights[weights==0]<-1
+    
+    strong_ties1<- model_based_extraction(weights, sd_diff=0, min_diff=1, model_backend="rstan")
+    test2_false_b1 <- dplyr::bind_rows(test2_false_b1, data.frame(strong = sum(strong_ties1$strong)==1, sample_size=i))
+    
+    strong_ties2<- model_based_extraction(weights, sd_diff=0, min_diff=2, model_backend="rstan")
+    test2_false_b2 <- dplyr::bind_rows(test2_false_b2, data.frame(strong = sum(strong_ties2$strong)==1, sample_size=i))
+    
+    strong_ties3<- model_based_extraction(weights, sd_diff=0, min_diff=3, model_backend="rstan")
+    test2_false_b3 <- dplyr::bind_rows(test2_false_b3, data.frame(strong = sum(strong_ties3$strong)==1, sample_size=i))
+    
+    strong_ties4<- model_based_extraction(weights, sd_diff=0, min_diff=4, model_backend="rstan")
+    test2_false_b4 <- dplyr::bind_rows(test2_false_b4, data.frame(strong = sum(strong_ties4$strong)==1, sample_size=i))
+    
+    strong_ties5<- model_based_extraction(weights, sd_diff=0, min_diff=5, model_backend="rstan")
+    test2_false_b5 <- dplyr::bind_rows(test2_false_b5, data.frame(strong = sum(strong_ties5$strong)==1, sample_size=i))
+    
+    gc()
+    
+  }
+}
+
+df_test2_false_b1 <- test2_false_b1%>% group_by(sample_size) %>% dplyr::summarise(per_false_pos = sum(strong)/20)
+df_test2_false_b1$min_diff<-1
+df_test2_false_b2 <- test2_false_b2%>% group_by(sample_size) %>% dplyr::summarise(per_false_pos = sum(strong)/20)
+df_test2_false_b2$min_diff<-2
+df_test2_false_b3 <- test2_false_b3%>% group_by(sample_size) %>% dplyr::summarise(per_false_pos = sum(strong)/20)
+df_test2_false_b3$min_diff<-3
+df_test2_false_b4 <- test2_false_b4%>% group_by(sample_size) %>% dplyr::summarise(per_false_pos = sum(strong)/20)
+df_test2_false_b4$min_diff<-4
+df_test2_false_b5 <- test2_false_b5%>% group_by(sample_size) %>% dplyr::summarise(per_false_pos = sum(strong)/20)
+df_test2_false_b5$min_diff<-5
+
+big.false.test2<- rbind(df_test2_false_b1,df_test2_false_b2,df_test2_false_b3,df_test2_false_b4,df_test2_false_b5)
+big.false.test2$min_diff<-as.factor(big.false.test2$min_diff)
+
+theme_set(theme_bw())
+plot.f.b2 <-ggplot(big.false.test2, aes(y=per_false_pos, x=sample_size, group=min_diff, color=min_diff, shape = min_diff, size = min_diff) ) + geom_point(alpha=0.6, aes(size=min_diff),stroke = 1) + scale_color_manual(values=c("sienna4","purple", "blue","firebrick3", "yellowgreen")) + ylim(0,1)+ theme( panel.grid.minor = element_blank(),axis.line.x = element_line(colour = 'black', size=0.4, linetype='solid'),  axis.line.y = element_line(colour = 'black', size=0.4, linetype='solid'),axis.text=element_text(size=14), axis.title=element_text(size=14)) + labs(x="Sample size", y = "Rate of false positives", tag="(b)")
+
+```
+
+  # Combine plots
+  
+```{r}
+grid.arrange(plot.f.s2,plot.f.b2, ncol=2)
+```
+
+PART 3: RELIABILITY TESTS
+
+  # FALSE POSITIVE TEST
+
+    # Small dataset
+
+      # Start with the literature methods
+
+```{r}
+test_df_q09 = data.frame()
+test_df_top = data.frame()
+test_df_clust = data.frame()
+test_df_csi = data.frame()
+
+sample_size = seq(2, 10, by=1)
+
+for (i in sample_size){
+  
+  for(j in 1:20){
+    
+    weights = round(abs(rnorm(i,2,1)))
+    weights[weights==0]<-1
+    simulated.df<-simulated.data%>%filter(from==1|to==1)
+    edge.simu<-create.an.edgeList(simulated.df)
+    edge.simu<-edge.simu %>% sample_n(i)
+    edge.simu$weight<-weights
+    net.simu<-create.a.network(edge.simu, directed=F)
+    
+    # Top 3 method
+    ind.strength<-data.frame(igraph::strength(net.simu))
+    colnames(ind.strength)<-"strength"
+    ind.strength$ties<-rownames(ind.strength)
+    ind.strength<-ind.strength%>%filter(ties!=1)
+    data_new2 <- ind.strength %>% arrange(desc(strength)) %>% slice(1:3)
+    
+    # Strength of strong ties (strength >0.9 percentile)
+    q.09<-quantile(igraph::strength(net.simu), probs = 0.9) 
+    data.temp<-ind.strength%>% filter(strength>q.09)
+    
+    # CSI method: select a random dyad 
+    dyad.df <- sample_n(ind.strength, 1)
+    edgeL.csi<-create.an.edgeList(simulated.data)
+    csi.value<-dyad.df$strength/mean(edgeL.csi$weight)
+    
+    if (csi.value>1){
+      
+      test_df_csi <- bind_rows(test_df_csi, data.frame(strong = T, sample_size=i))
+    }
+    
+    # Clustering analysis
+    if(i >2){
+      
+      dist<-dist(weights)
+      cl <- hdbscan(dist, minPts = 2)
+      least_dense = names(sort(table(cl$cluster),decreasing=FALSE)[1])
+      df_results <- data.frame(weight=weights, cluster=cl$cluster)
+      
+      if(length(table(cl$cluster)) > 1){
+        
+        test_df_clust <- bind_rows(test_df_clust, data.frame(strong = T, sample_size=i))
+      }
+    }
+    
+    if(nrow(data.temp)>0){
+      
+      test_df_q09 <- bind_rows(test_df_q09, data.frame(strong = T, sample_size=i))
+      
+    } 
+    
+    if(nrow(data_new2)>0){
+      
+      test_df_top<-bind_rows(test_df_top, data.frame(strong = T, sample_size=i))
+    }
+  }
+}
+
+
+# gather data into one dataframe and plot
+df_sum_s_top<- test_df_top %>% group_by(sample_size) %>% dplyr::summarise(per_false_pos = sum(strong)/20 )
+df_sum_s_top$fct<-"top"
+
+#df_sum_s_q09 <- test_df_q09 %>% group_by(sample_size) %>% dplyr::summarise(per_false_pos = sum(strong)/length(unique(sample_size))*10 )
+df_sum_s_q09<-df_sum_s_top
+df_sum_s_q09$per_false_pos<-0
+df_sum_s_q09$fct<-"q09"
+
+df_sum_s_clust <- test_df_clust %>% group_by(sample_size) %>% dplyr::summarise(per_false_pos = sum(strong)/20)
+df_sum_s_clust$fct<-"clust"
+df_sum_s_clust<-rbind( df_sum_s_clust, data.frame(sample_size=c(2,3), per_false_pos=0, fct="clust"))
+
+df_sum_s_csi <- test_df_csi %>% group_by(sample_size) %>% dplyr::summarise(per_false_pos = sum(strong)/20 )
+df_sum_s_csi$fct<-"csi"
+```
+
+      # Add MBM function 
+
+```{r}
+test_df_s = data.frame()
+
+sample_size = seq(2,10, by=1)
+
+for (i in sample_size){
+  
+  for(j in 1:20){
+    
+    weights = round(abs(rnorm(i,2,1)))
+    weights[weights==0]<-1
+    
+    strong_ties<- model_based_extraction(weights, sd_diff=0, min_diff=1, model_backend="rstan")
+    test_df_s <- bind_rows(test_df_s, data.frame(strong = sum(strong_ties$strong)>=1, sample_size=i))
+    
+  }
+}
+
+df_sum_s <- test_df_s %>% group_by(sample_size) %>% dplyr::summarise(per_false_pos = sum(strong)/20)
+df_sum_s$fct<-"new"
+
+# Regroup all methods
+small.s.test<- rbind(df_sum_s_top,df_sum_s_q09,df_sum_s_clust,df_sum_s_csi,df_sum_s) 
+small.s.test$fct<-as.factor(small.s.test$fct)
+
+theme_set(theme_bw())
+plot.s3<- ggplot(small.s.test, aes(y=per_false_pos, x=sample_size, group=fct, color=fct, shape = fct, size = fct) ) + geom_point(alpha=0.6, aes(size=fct),stroke = 1) + scale_color_manual(values=c("cyan", "springgreen", "gold", "black", "deeppink")) + ylim(0,1)+ scale_x_continuous(limits = c(2, 10), breaks = seq(2,10, by=1)) + theme( panel.grid.minor = element_blank(),axis.line.x = element_line(colour = 'black', size=0.4, linetype='solid'),  axis.line.y = element_line(colour = 'black', size=0.4, linetype='solid'),axis.text=element_text(size=14), axis.title=element_text(size=14)) + labs(x="Sample size", y = "Rate of false positives", tag="(a)")
+```
+
+    # Big dataset
+
+      # Start with the literature methods
+
+```{r}
+test_df_q09b = data.frame()
+test_df_topb = data.frame()
+test_df_clustb = data.frame()
+test_df_csi_b = data.frame()
+
+sample_size = seq(15,60, by=5)
+
+for (i in sample_size){
+  
+  for(j in 1:20){
+    
+    weights = round(abs(rnorm(i,2,1))) 
+    weights[weights==0]<-1
+    simulated.df<-simulated.data%>%filter(from==4|to==4)
+    edge.simu<-create.an.edgeList(simulated.df)
+    edge.simu<-edge.simu %>% sample_n(i)
+    edge.simu$weight<-weights
+    net.simu<-create.a.network(edge.simu, directed=F)
+    
+    # Top 3 method
+    ind.strength<-data.frame(igraph::strength(net.simu))
+    colnames(ind.strength)<-"strength"
+    ind.strength$ties<-rownames(ind.strength)
+    ind.strength<-ind.strength%>%filter(ties!=1)
+    data_new2 <- ind.strength %>% arrange(desc(strength)) %>% slice(1:3)
+    
+    # Strength of strong ties (strength >0.9 percentile)
+    q.09<-quantile(igraph::strength(net.simu), probs = 0.9) 
+    data.temp<-ind.strength%>% filter(strength>q.09)
+    
+    # CSI method: select a random dyad 
+    dyad.df <- sample_n(ind.strength, 1)
+    edgeL.csi<-create.an.edgeList(simulated.data)
+    csi.value<-dyad.df$strength/mean(edgeL.csi$weight)
+    
+    if (csi.value>1){
+      
+      test_df_csi_b <- bind_rows(test_df_csi_b, data.frame(strong = T, sample_size=i))
+    }
+    
+    # Clustering analysis
+    if(i >2){
+      
+      dist<-dist(weights)
+      cl <- hdbscan(dist, minPts = 2)
+      least_dense = names(sort(table(cl$cluster),decreasing=FALSE)[1])
+      df_results <- data.frame(weight=weights, cluster=cl$cluster)
+      
+      if(length(table(cl$cluster)) > 1){
+        
+        test_df_clustb <- bind_rows(test_df_clustb, data.frame(strong = T, sample_size=i))
+      }
+    }
+    
+    if(nrow(data.temp)>0){
+      
+      test_df_q09b <- bind_rows(test_df_q09b, data.frame(strong = T, sample_size=i))
+      
+    } 
+    
+    if(nrow(data_new2)>0){
+      
+      test_df_topb<-bind_rows(test_df_topb, data.frame(strong = T, sample_size=i))
+    }
+  }
+}
+
+# gather data into one dataframe and plot
+df_sum_b_top<- test_df_topb %>% group_by(sample_size) %>% dplyr::summarise(per_false_pos = sum(strong)/20 )
+df_sum_b_top$fct<-"top"
+
+df_sum_b_q09 <- test_df_q09b %>% group_by(sample_size) %>% dplyr::summarise(per_false_pos = sum(strong)/20 )
+df_sum_b_q09$fct<-"q09"
+
+df_sum_b_clust <- test_df_clustb %>% group_by(sample_size) %>% dplyr::summarise(per_false_pos = sum(strong)/20)
+df_sum_b_clust$fct<-"clust"
+
+df_sum_b_csi <- test_df_csi_b %>% group_by(sample_size) %>% dplyr::summarise(per_false_pos = sum(strong)/20 )
+df_sum_b_csi$fct<-"csi"
+```
+
+      # Add the MBM function 
+
+```{r}
+test_df_b = data.frame()
+
+sample_size = seq(15,60, by=5)
+
+for (i in sample_size){
+  
+  for(j in 1:20){
+    
+    weights = round(abs(rnorm(i,2,1)))
+    weights[weights==0]<-1
+    
+    strong_ties<- model_based_extraction(weights, sd_diff=0, min_diff=3, model_backend="rstan")
+    test_df_b <- bind_rows(test_df_b, data.frame(strong = sum(strong_ties$strong)>=1, sample_size=i))
+    
+  }
+}
+
+df_sum_b <- test_df_b %>% group_by(sample_size) %>% dplyr::summarise(per_false_pos = sum(strong)/20)
+df_sum_b$fct<-"new"
+
+# Regroup all methods
+big.s.test<- rbind(df_sum_b_top,df_sum_b_q09,df_sum_b_clust,df_sum_b_csi,df_sum_b)
+big.s.test$fct<-as.factor(big.s.test$fct)
+
+theme_set(theme_bw())
+plot.b3<-ggplot(big.s.test, aes(y=per_false_pos, x=sample_size, group=fct, color=fct, shape = fct, size = fct) ) + geom_point(alpha=0.6, aes(size=fct),stroke = 1) + scale_color_manual(values=c("cyan", "springgreen", "gold", "black", "deeppink")) + ylim(0,1)+ scale_x_continuous(limits = c(15, 60), breaks = seq(15,60, by=5)) + theme( panel.grid.minor = element_blank(),axis.line.x = element_line(colour = 'black', size=0.4, linetype='solid'),  axis.line.y = element_line(colour = 'black', size=0.4, linetype='solid'), axis.text= element_text(size=14), axis.title=element_text(size=14)) + labs(x="Sample size", y = "Rate of false positives", tag="(b)")
+```
+
+  # Combine plots
+  
+```{r}
+grid.arrange(plot.s3,plot.b3,ncol=2)
+```
+  
+  # TRUE POSITIVE TEST
+
+    # Small dataset
+
+      # Start with the literature methods
+
+```{r}
+test_df_clust_real_s = data.frame()
+test_df_q09_real_s= data.frame()
+test_df_top_real_s= data.frame()
+test_df_csi_real_s= data.frame()
+
+sample_size = seq(1,9, by=1)
+
+for (i in sample_size){
+  
+  for(j in 1:20){
+    
+    weights = round(abs(rnorm(i,2,1)))
+    weights[length(weights)+1] <- 10 
+    
+    simulated.df<-simulated.data%>%filter(from==1|to==1)
+    edge.simu<-create.an.edgeList(simulated.df)
+    edge.simu<-edge.simu %>% sample_n(i+1)
+    edge.simu$weight<-weights
+    net.simu<-create.a.network(edge.simu, directed=F)
+    
+    # Top 3 method
+    ind.strength<-data.frame(igraph::strength(net.simu))
+    colnames(ind.strength)<-"strength"
+    ind.strength$ties<-rownames(ind.strength)
+    ind.strength<-ind.strength%>%filter(ties!=1)
+    data_new2 <- ind.strength %>%  arrange(desc(strength))  %>% slice(1:3)
+    
+    # Strength of strong ties (strength >0.9 percentile)
+    q.09<-quantile(igraph::strength(net.simu), probs = 0.9) 
+    data.temp<-ind.strength%>% filter(strength>q.09)
+    
+    # CSI method: select a random dyad 
+    dyad.df <- sample_n(ind.strength, 1)
+    edgeL.csi<-create.an.edgeList(simulated.data)
+    csi.value<-dyad.df$strength/mean(edgeL.csi$weight)
+    
+    if (csi.value>1){
+      
+      test_df_csi_real_s <- bind_rows(test_df_csi_real_s, data.frame(strong = T, sample_size=i+1))
+      
+    }
+    
+    # Clustering analysis
+    if(i >2){
+      
+      dist<-dist(weights)
+      cl <- hdbscan(dist, minPts = 2)
+      least_dense = names(sort(table(cl$cluster),decreasing=FALSE)[1])
+      df_results <- data.frame(weight=weights, cluster=cl$cluster)
+      
+      if(length(table(cl$cluster)) > 1 & nrow(df_results%>%filter(cluster==least_dense))==1){
+        
+        test_df_clust_real_s <- bind_rows(test_df_clust_real_s, data.frame(strong = T, sample_size=i+1))
+        
+      }
+    }
+    
+    if(nrow(data.temp)==1){
+      
+      test_df_q09_real_s <- bind_rows(test_df_q09_real_s, data.frame(strong = T, sample_size=i+1))
+      
+    } 
+    
+    if(nrow(data_new2)==1){
+      
+      test_df_top_real_s<-bind_rows(test_df_top_real_s, data.frame(strong = T, sample_size=i+1))
+      
+    }
+  }
+}
+
+# gather data into one dataframe and plot
+#df_real_s_top<- test_df_top_real_s %>% group_by(sample_size) %>% dplyr::summarise(per_true_pos = sum(strong)/length(unique(sample_size))*10 )
+df_real_s_top<- data.frame(sample_size=c(2,3,4,5,6,7,8,9,10), per_true_pos=0, fct="top")
+
+# df_real_s_q09 <- test_df_q09_real_s %>% group_by(sample_size) %>% dplyr::summarise(per_true_pos = sum(strong)/length(unique(sample_size))*10 )
+df_real_s_q09<- data.frame(sample_size=c(2,3,4,5,6,7,8,9,10), per_true_pos=0, fct="q09")
+
+df_real_s_clust <- test_df_clust_real_s %>% group_by(sample_size) %>% dplyr::summarise(per_true_pos = sum(strong)/20)
+df_real_s_clust$fct<-"clust"
+df_real_s_clust<-rbind( df_real_s_clust, data.frame(sample_size=c(2,3,4), per_true_pos=0, fct="clust"))
+
+df_real_s_csi <- test_df_csi_real_s %>% group_by(sample_size) %>% dplyr::summarise(per_true_pos = sum(strong)/20 )
+df_real_s_csi$fct<-"csi"
+```
+
+      # Add the MBM function 
+
+```{r}
+test_df_real_s = data.frame()
+
+sample_size = seq(1,9, by=1)
+
+for (i in sample_size){
+  
+  for(j in 1:20){
+    
+    weights = round(abs(rnorm(i,2,1))) 
+    weights[length(weights)+1] <- 10
+    
+    
+    strong_ties<- model_based_extraction(weights, sd_diff=0, min_diff=1, model_backend="rstan")
+    test_df_real_s <- bind_rows(test_df_real_s, data.frame(strong = sum(strong_ties$strong)==1, sample_size=i+1))
+    
+  }
+}
+
+test_f_real_s<-test_df_real_s%>%filter(strong==TRUE)
+df_real_s <- test_f_real_s%>%group_by(sample_size) %>% dplyr::summarise(per_true_pos = sum(strong)/20)
+df_real_s$fct<-"new"
+
+# Gather all methods into one
+small.real.test<- rbind(df_real_s_top,df_real_s_q09,df_real_s_clust,df_real_s_csi,df_real_s)
+small.real.test$fct<-as.factor(small.real.test$fct)
+
+theme_set(theme_bw())
+plot.s3.t<-ggplot(small.real.test, aes(y=per_true_pos, x=sample_size, group=fct, color=fct, shape = fct, size = fct) ) +geom_point(alpha=0.6, aes(size=fct),stroke = 1) + scale_color_manual(values=c("cyan", "springgreen", "gold", "black", "deeppink")) + ylim(0,1)+ scale_x_continuous(limits = c(2, 10), breaks = seq(2,10, by=1)) + theme( panel.grid.minor = element_blank(),axis.line.x = element_line(colour = 'black', size=0.4, linetype='solid'),axis.line.y = element_line(colour = 'black', size=0.4, linetype='solid'),axis.text= element_text(size=14), axis.title=element_text(size=14)) + labs(x="Sample size", y = "Rate of true positives", tag="(a)")
+```
+
+    # Big dataset
+
+      # Start with the literature methods
+
+```{r}
+test_df_clust_real_b= data.frame()
+test_df_q09_real_b= data.frame()
+test_df_top_real_b= data.frame()
+test_df_csi_real_b= data.frame()
+
+sample_size = seq(14,59, by=5)
+
+for (i in sample_size){
+  
+  for(j in 1:20){
+    
+    weights = round(abs(rnorm(i,2,1))) 
+    weights[length(weights)+1] <- 10 
+    
+    simulated.df<-simulated.data%>%filter(from==4|to==4)
+    edge.simu<-create.an.edgeList(simulated.df)
+    edge.simu<-edge.simu %>% sample_n(i+1)
+    edge.simu$weight<-weights
+    net.simu<-create.a.network(edge.simu, directed=F)
+    
+    # Top 3 method
+    ind.strength<-data.frame(igraph::strength(net.simu))
+    colnames(ind.strength)<-"strength"
+    ind.strength$ties<-rownames(ind.strength)
+    ind.strength<-ind.strength%>%filter(ties!=1)
+    data_new2 <- ind.strength %>%  arrange(desc(strength))  %>% slice(1:3)
+   
+     # Strength of strong ties (strength >0.9 percentile)
+    q.09<-quantile(igraph::strength(net.simu), probs = 0.9) 
+    data.temp<-ind.strength%>% filter(strength>q.09)
+    
+    # CSI method: select a random dyad 
+    dyad.df <- sample_n(ind.strength, 1)
+    edgeL.csi<-create.an.edgeList(simulated.data)
+    csi.value<-dyad.df$strength/mean(edgeL.csi$weight)
+    
+    if (csi.value>1){
+      
+      test_df_csi_real_b <- bind_rows(test_df_csi_real_b, data.frame(strong = T, sample_size=i+1))
+    }
+    
+    # Clustering analysis
+    if(i >2){
+      
+      dist<-dist(weights)
+      cl <- hdbscan(dist, minPts = 2)
+      least_dense = names(sort(table(cl$cluster),decreasing=FALSE)[1])
+      df_results <- data.frame(weight=weights, cluster=cl$cluster)
+      
+      if(length(table(cl$cluster)) > 1 & nrow(df_results%>%filter(cluster==least_dense))==1){
+        
+        test_df_clust_real_b <- bind_rows(test_df_clust_real_b, data.frame(strong = T, sample_size=i+1))
+        
+      }
+    }
+    
+    if(nrow(data.temp)==1){
+      
+      test_df_q09_real_b <- bind_rows(test_df_q09_real_b, data.frame(strong = T, sample_size=i+1))
+      
+    } 
+    
+    if(nrow(data_new2)==1){
+      
+      test_df_top_real_b<-bind_rows(test_df_top_real_b, data.frame(strong = T, sample_size=i+1))
+      
+    }
+  }
+}
+
+# gather data into one data frame
+#df_real_b_top<- test_df_top_real_b %>% group_by(sample_size) %>% dplyr::summarise(per_true_pos = sum(strong)/length(unique(sample_size))*10 )
+df_real_b_top<- data.frame(sample_size=c(15,20,25,30,35,40,45,50,55,60), per_true_pos=0, fct="top")
+
+df_real_b_q09 <- test_df_q09_real_b %>% group_by(sample_size) %>% dplyr::summarise(per_true_pos = sum(strong)/20)
+df_real_b_q09<- rbind( df_real_b_q09, data.frame(sample_size=c(25,30,35,40,50,55,60), per_true_pos=0))
+df_real_b_q09$fct<-"q09"
+
+df_real_b_clust <- test_df_clust_real_b %>% group_by(sample_size) %>% dplyr::summarise(per_true_pos = sum(strong)/20)
+df_real_b_clust$fct<-"clust"
+
+df_real_b_csi <- test_df_csi_real_b %>% group_by(sample_size) %>% dplyr::summarise(per_true_pos = sum(strong)/20 )
+df_real_b_csi$fct<-"csi"
+```
+
+      # Add the MBM function
+
+```{r}
+sample_size = seq(14,59, by=5)
+test_df_real_b<-data.frame()
+
+for (i in sample_size){
+  
+  for(j in 1:20){
+    
+    weights = round(abs(rnorm(i,2,1)))
+    weights[length(weights)+1] <- 10
+    
+    strong_ties<- model_based_extraction(weights, sd_diff=0, min_diff=3, model_backend="rstan")
+    test_df_real_b <- bind_rows(test_df_real_b, data.frame(strong = sum(strong_ties$strong)==1, sample_size=i+1))
+    
+  }
+}
+
+test_f_real_b<-test_df_real_b%>%filter(strong==TRUE)
+df_real_b <- test_f_real_b%>%group_by(sample_size) %>% dplyr::summarise(per_true_pos = sum(strong)/20)
+df_real_b$fct<-"new"
+
+# Gather all methods
+big.real.test<- rbind(df_real_b_top,df_real_b_q09,df_real_b_clust,df_real_b_csi,df_real_b) #
+big.real.test$fct<-as.factor(big.real.test$fct)
+
+theme_set(theme_bw())
+plot.b3.t<-ggplot(big.real.test, aes(y=per_true_pos, x=sample_size, group=fct, color=fct, shape = fct, size = fct) ) + geom_point(alpha=0.6, aes(size=fct),stroke = 1) + scale_color_manual(values= c("cyan", "springgreen", "gold", "black", "deeppink")) + ylim(0,1)+ scale_x_continuous(limits = c(15, 60), breaks = seq(15,60, by=5)) + theme( panel.grid.minor = element_blank(),axis.line.x = element_line(colour = 'black', size=0.4, linetype='solid'), axis.line.y = element_line(colour = 'black', size=0.4, linetype='solid'),axis.text= element_text(size=14), axis.title=element_text(size=14)) + labs(x="Sample size", y = "Rate of true positives", tag="(b)")
+```
+
+  # Combine plots
+  
+```{r}
+grid.arrange(plot.s3.t,plot.b3.t,ncol=2)
+```
+
+PART 4: CASE STUDY
+
+# Load baboon data
+
+```{r}
+baboon.df<-read.csv("grooming_baboons.csv")
+baboon.df2<-baboon.df[,c("GIVER","RECIPIENT","Date")]
+colnames(baboon.df2)<-c("from","to","date")
+
+baboon.df2$date<-dmy(baboon.df2$date)
+```
+
+# Extract strong ties
+
+```{r}
+strong.ties.baboon<-data.frame()
+windowstart <- ymd(min(baboon.df2$date))
+windowsize <-  as.numeric(months(2), "days")
+windowEnd<- max(baboon.df2$date)
+windowshift<-  as.numeric(months(1), "days")
+windowend<-windowstart+windowsize
+
+test_df_q09 = data.frame()
+test_df_top = data.frame()
+test_df_clust = data.frame()
+test_df_csi = data.frame()
+
+while (windowstart + windowsize <= windowEnd){
+  
+  subset.df <- create.window(baboon.df2, windowstart, windowend)
+  
+  if(nrow(subset.df)>0){
+    
+    edgelist<- create.an.edgeList(subset.df[,c(1,2)])
+    baboon.id<- unique(c(edgelist$from,edgelist$to))
+    
+    for (i in baboon.id) {
+      
+      subset.id <- edgelist%>% filter(from ==i | to ==i )
+      subset.id$dyads <- ifelse(as.character(subset.id$from) < as.character(subset.id$to), paste(subset.id$from, subset.id$to), paste(subset.id$to, subset.id$from))
+      non.dire.edgelist<-subset.id%>% dplyr::group_by(dyads)%>% dplyr::summarise(weight=sum(weight))
+      
+      if (nrow(non.dire.edgelist)>1){
+        
+        if(nrow(non.dire.edgelist)>11){
+          
+          strong.ties <- model_based_extraction(non.dire.edgelist$weight, sd_diff=0, min_diff = 3)
+          
+        }else{
+          
+          strong.ties <- model_based_extraction(non.dire.edgelist$weight, sd_diff=0, min_diff = 1)
+          
+        }
+        # Store measure
+        strong.ties$focal<- i
+        strong.ties$date<- windowstart
+        non.dire.edgelist<-non.dire.edgelist[order(non.dire.edgelist$weight),]
+        strong.ties<-cbind(strong.ties,non.dire.edgelist[,1])
+        strong.ties.baboon<- rbind(strong.ties.baboon,strong.ties)
+      }
+      
+      # top 3
+      net.sub<-create.a.network(subset.id, directed=F)
+      ind.strength<-data.frame(igraph::strength(net.sub))
+      colnames(ind.strength)<-"strength"
+      ind.strength$ties<-rownames(ind.strength)
+      ind.strength<-ind.strength%>%filter(ties!=i)
+      data_new2 <- ind.strength %>% arrange(desc(strength)) %>% slice(1:3)
+      
+      if(nrow(data_new2)>0){
+        
+        data_new2$focal<- i
+        data_new2$date<- windowstart
+        data_new2$strong<-1
+        test_df_top<-rbind(test_df_top, data_new2)
+        
+      } else{
+        
+        test_df_top<-rbind(test_df_top, data.frame(strong = 0, focal=i, weight=0, date =windowstart))
+      } 
+      
+      # Strength of strong ties (strength >0.9 percentile)
+      q.09<-quantile(igraph::strength(net.sub), probs = 0.9) 
+      data.temp<-ind.strength%>% filter(strength>q.09)
+      
+      if(nrow(data.temp)>0){
+        
+        data.temp$focal<- i
+        data.temp$date<- windowstart
+        data.temp$strong<-1
+        test_df_q09<-rbind(test_df_q09, data.temp)
+        
+      } else{
+        test_df_q09<-rbind(test_df_q09, data.frame(strength = 0,ties="NA", focal=i, date =windowstart, strong=0))
+      }
+      
+      # CSI method: select a random dyad 
+      for (each in unique(ind.strength$ties)){
+        
+        dyad.df <- ind.strength %>% filter(ties==each)
+        edgeL.csi<-create.an.edgeList(edgelist)
+        csi.value<-dyad.df$strength/mean(edgeL.csi$weight)
+        
+        if (csi.value>1){
+          
+          test_df_csi <- bind_rows(test_df_csi, data.frame(strong = 1, focal=i, tie= each, weight=dyad.df$strength, date =windowstart))
+          
+        } else{
+          
+          test_df_csi <- bind_rows(test_df_csi, data.frame(strong = 0, focal=i, tie= each, weight=dyad.df$strength, date =windowstart))
+          
+        }
+      }
+      
+      # Clustering analysis
+      if(nrow(non.dire.edgelist)>2){
+        
+        dist<-dist(non.dire.edgelist$weight)
+        cl <- hdbscan(dist, minPts = 2)
+        least_dense = names(sort(table(cl$cluster),decreasing=FALSE)[1])
+        df_results <- data.frame(weight=non.dire.edgelist$weight, cluster=cl$cluster)
+        
+        if(length(table(cl$cluster)) > 1){
+          clust.df<- df_results%>% filter(cluster==least_dense)
+          clust.df$focal<-i
+          clust.df$date<- windowstart
+          clust.df$strong<-1
+          test_df_clust <- bind_rows(test_df_clust,clust.df)
+          
+        } else{
+          
+          test_df_clust <- bind_rows(test_df_clust, data.frame(strong = 0, focal=i, weight=non.dire.edgelist$weight, date =windowstart))
+          
+        }
+      }
+    }
+  }
+  
+  windowend = windowend + windowshift
+  windowstart= as.Date(windowstart)+ windowshift
+  
+}
+```
+
+# Set up dataframes of each method so we can merge them together. 
+
+```{r}
+## The MBM set up
+strong.ties.baboon$method<- "function" 
+
+# get ties from dyad column
+strong.ties.baboon[c('ID1', 'ID2')] <- str_split_fixed(strong.ties.baboon$dyads, ' ', 2)
+for (i in 1:nrow(strong.ties.baboon)){
+  
+  if (strong.ties.baboon[i,"ID1"]==strong.ties.baboon[i,"focal"] ){
+    strong.ties.baboon[i,"tie"]<- strong.ties.baboon[i,"ID2"]
+  }else{
+    strong.ties.baboon[i,"tie"]<- strong.ties.baboon[i,"ID1"]
+  }
+}
+
+strong.ties.baboon<-strong.ties.baboon %>% select (-("dyads"), -("ID1"), -("ID2"))
+strg.ties.fct<-strong.ties.baboon[,c( "focal", "tie", "weight", "strong", "date", "method")]
+
+## Quantile function set up
+test_df_q09$method<- "q09" 
+strg.ties.Q09 <-test_df_q09[,c( "focal", "ties", "strength", "strong", "date", "method")]
+colnames(strg.ties.Q09)<-c( "focal", "tie", "weight", "strong", "date", "method")
+
+## Top 3 set up
+test_df_top$method<- "top" 
+strg.ties.top <-test_df_top[,c( "focal", "ties", "strength", "strong", "date", "method")]
+colnames(strg.ties.top)<-c( "focal", "tie", "weight", "strong", "date", "method")
+
+## Clustering analysis
+test_df_clust$method<- "clust" 
+test_df_clust$tie<- "NA" 
+strg.ties.clust <-test_df_clust[,c( "focal", "tie", "weight", "strong", "date", "method")]
+
+## CSI set up
+test_df_csi$method<- "csi" 
+strg.ties.csi <-test_df_csi[,c( "focal", "tie", "weight", "strong", "date", "method")]
+
+### ALL TOGETHER
+strg.tie.methods<- rbind(strg.ties.csi,strg.ties.clust,strg.ties.top,strg.ties.Q09,strg.ties.fct)
+
+# We then focus on one individual of the group to make our case
+node.str <-strg.tie.methods%>%filter(focal=="Frwnre")
+node.str$strong<-as.factor(node.str$strong)
+fct.node.df<-node.str%>%filter(method=="function")
+
+```
+
+# PLot
+
+```{r}
+ggplot(data=node.str%>%filter(method=="function"), aes(x=date, y=weight, group=strong)) + geom_point(size=2)+ scale_color_manual(values= c("black")) + theme( panel.grid.minor = element_blank(),axis.line.x = element_line(colour = 'black', size=0.4, linetype='solid'),  axis.line.y = element_line(colour = 'black', size=0.4, linetype='solid'),axis.text=element_text(size=14), axis.title=element_text(size=14)) + scale_y_continuous(breaks = c(0,5,10,15,20,25))
+
+plot+ theme( panel.grid.minor = element_blank(),axis.line.x = element_line(colour = 'black', size=0.4, linetype='solid'),  axis.line.y = element_line(colour = 'black', size=0.4, linetype='solid'),axis.text=element_text(size=14), axis.title=element_text(size=14)) # 6 4.25 size plot
+
+plist<-list()
+
+for ( i in 1:length(unique(node.str$date))){
+  
+  # Density curve
+  plot.density<-ggplot(fct.node.df%>%filter(date==unique(node.str$date)[i]), aes(x=weight)) + geom_density(color="black",size=0.6)
+  
+  date.sub.df<-fct.node.df%>%filter(date==unique(node.str$date)[i])
+ 
+  # add the cut off for each of the methods
+  fct.data<-node.str%>%filter(date==unique(node.str$date)[i] & method =="function")
+  str.fct<-fct.data%>%filter(strong==1)
+  
+  if(nrow(str.fct)>0){
+    
+    value.fct<-min(unique(str.fct$weight))-1
+    
+  }else{
+    value.fct<-0
+  }
+  
+  csi.data<-node.str%>%filter(date==unique(node.str$date)[i] & method =="csi")
+  csi.fct<-csi.data%>%filter(strong==1)
+  
+  if(nrow(csi.fct)>0){
+    
+    value.csi<-min(unique(csi.fct$weight))-1
+    
+  }else{
+    value.csi<-0
+  }
+  
+  q09.data<-node.str%>%filter(date==unique(node.str$date)[i] & method =="q09")
+  q09.fct<-q09.data%>%filter(strong==1)
+  
+  if(nrow(q09.fct)>0){
+    
+    value.q09<-min(unique(q09.fct$weight))-1
+  }else{
+    value.q09<-0
+  }
+  
+  top.data<-node.str%>%filter(date==unique(node.str$date)[i] & method =="top")
+  top.fct<-top.data%>%filter(strong==1)
+  
+  if(nrow(top.fct)>0){
+    
+    value.top<-min(unique(top.fct$weight))-1
+  }else{
+    value.top<-0
+  }
+  
+  clust.data<-node.str%>%filter(date==unique(node.str$date)[i] & method =="clust")
+  clust.fct<-clust.data%>%filter(strong==1)
+  
+   if(nrow(clust.fct)>0){
+    
+    value.clust<-min(unique(clust.fct$weight))-1
+  }else{
+    value.clust<-0
+  }
+  
+  # plot all
+  values <- data.frame(method=c("function", "csi", "clust", "q09", "top"), value=c(value.fct,value.csi,value.clust,value.q09,value.top), color=c("gold","springgreen","cyan","black", "deeppink"), shape =c("solid","solid","dashed","dashed","solid"), size=c(3,2,2,1,1))
+  
+  values<-values%>%filter(value!=0)
+  
+  if(nrow(values)==1){
+    
+    plot<-plot.density+ geom_vline(aes(xintercept=values$value),
+                                 color=values$color, linetype=values$shape, size=values$size)
+  }
+  
+  if(nrow(values)==2){
+    
+    plot<-plot.density+ geom_vline(aes(xintercept=values$value[1]),
+                                 color=values$color[1], linetype=values$shape[1], size=values$size[1])+geom_vline(aes(xintercept=values$value[2]),
+                                 color=values$color[2], linetype=values$shape[2], size=values$size[2])
+  }
+  
+  if(nrow(values)==3){
+    
+    plot<-plot.density+ geom_vline(aes(xintercept=values$value[1]),
+                                 color=values$color[1], linetype=values$shape[1], size=values$size[1])+geom_vline(aes(xintercept=values$value[2]),
+                                 color=values$color[2], linetype=values$shape[2], size=values$size[2])+geom_vline(aes(xintercept=values$value[3]),
+                                 color=values$color[3], linetype=values$shape[3], size=values$size[3])
+    
+  }
+  
+  if(nrow(values)==4){
+    
+    plot<-plot.density+ geom_vline(aes(xintercept=values$value[1]),
+                                 color=values$color[1], linetype=values$shape[1],  size=values$size[1])+geom_vline(aes(xintercept=values$value[2]),
+                                 color=values$color[2], linetype=values$shape[2],  size=values$size[2])+geom_vline(aes(xintercept=values$value[3]),
+                                 color=values$color[3], linetype=values$shape[3],  size=values$size[3])+geom_vline(aes(xintercept=values$value[4]),
+                                 color=values$color[4], linetype=values$shape[4],  size=values$size[4])
+  }
+  
+  if(nrow(values)==5){
+    
+    plot<-plot.density+ geom_vline(aes(xintercept=values$value[1]),
+                                 color=values$color[1], linetype=values$shape[1],  size=values$size[1])+geom_vline(aes(xintercept=values$value[2]),
+                                 color=values$color[2], linetype=values$shape[2],  size=1)+geom_vline(aes(xintercept=values$value[3]),
+                                 color=values$color[3], linetype=values$shape[3],  size=values$size[3])+geom_vline(aes(xintercept=values$value[4]),
+                                 color=values$color[4], linetype=values$shape[4],  size=values$size[4])+geom_vline(aes(xintercept=values$value[5]),
+                                 color=values$color[5], linetype=values$shape[5],  size=values$size[5])
+    
+  }
+  plist[[length(plist)+1]]<-plot
+}
+
+
+library(gridExtra)
+n <- length(plist)
+nCol <- floor(sqrt(n))
+do.call("grid.arrange", c(plist, ncol=2))
+
+ hist(date.sub.df$weight, xlab = "Weight", ylab = "Count", main = "",breaks = seq(0, 26, length.out = 20))
+ lines(density(date.sub.df$weight),
+      lwd = 2,
+      col = "black")
+abline(v=values$value[1],col=values$color[1], lwd=9, lty=values$shape[1]) # orange
+abline(v=values$value[2],col=values$color[2], lwd=4, lty=values$shape[2]) # purple
+abline(v=values$value[3],col=values$color[3], lwd=6, lty=values$shape[3])# red
+abline(v=values$value[4],col=values$color[4], lwd=4, lty=values$shape[4]) # grey
+abline(v=values$value[5],col=values$color[5], lwd=3, lty=values$shape[5])
+```
+
+
+### DIFFERENT FUNCTIONS USED WHEN TESTING DIFFERENT PRIORS DURING THE SENSITIVE ANALYSIS
+
+  # The function with DEFAULT PRIORS
+
+```{r}
+build_stan_model <- function(formula,df_weights, family){
+  
+  #for normal and skew normal add priors
+  if(family=="normal" ) {
+    
+    my_priors<-get_prior( bf(weights~1 ), data=data.frame(weights=(weights)), family = "normal")
+    
+    #use brm to create the stan code and data for the model
+    scode <- make_stancode(formula, df_weights, family = family , prior =my_priors)
+    
+  } else if (family == "skew_normal") {
+    
+    my_priors<-get_prior( bf(weights~1 ) , data=data.frame(weights=(weights)), family = "skew_normal" )
+    
+    #use brm to create the stan code and data for the model
+    scode <- make_stancode(formula, df_weights, family = family, prior =my_priors ) 
+    
+  } else if (family == "poisson") {
+    
+    if(formula =='weights ~ 1 + label'){
+      
+      df_weights$label<-as.factor(df_weights$label)
+      
+      my_priors<-get_prior( bf(weights~ 1+ label ), data=df_weights, family = "poisson")
+      
+      #use brm to create the stan code and data for the model
+      scode <- make_stancode(formula, df_weights, family = family, prior= my_priors)
+      
+    }else{
+      
+      #get default priors from brms
+      my_priors<-get_prior( bf(weights~1 ) , data=df_weights, family = "poisson" )
+      
+      #use brm to create the stan code and data for the model
+      scode <- make_stancode(formula, df_weights, family = family, prior= my_priors)
+      
+    }
+    
+  } else {
+    
+    print('unsupported model family used')
+  }
+  
+  #create the stan model
+  model <- stan_model(model_code=scode)
+  
+  return(model)
+}
+
+## Build models.
+#choose some weights to test the model on:
+weights <- c(2,1,0,4,2,2,2,1,1,3,8) #can be anything, just need the variable names
+
+#add arbitrary labels (this is used just to build the model)
+weight_labels <- as.factor(rep(c(0,1),length(weights))) 
+
+#build and compile all base models (this saves time when running the models!)
+normal_model_base <- build_stan_model('weights ~ 1', data.frame(weights=weights),"normal")
+skewnormal_model_base <- build_stan_model('weights ~ 1', data.frame(weights=weights), "skew_normal")
+poisson_model_base <- build_stan_model('weights ~ 1', data.frame(weights=weights), "poisson")
+poisson_model_label <- build_stan_model('weights ~ 1 + label', data.frame(weights=weights, label=weight_labels), "poisson")
+
+#fit the base model to data
+fit_stan_model <- function(model, formula, df_weights, family){
+  
+  #get the data into rstan format
+  sdata <- make_standata(formula, df_weights )
+  
+  #fit the model to the data
+  stanfit <- suppressWarnings(rstan::sampling(object = model, data = sdata, refresh = 0, chains=1))
+  
+  # feed the Stan model back into a brms model
+  
+  fit <- brm(formula, df_weights, empty = TRUE, family = family)
+  fit$fit <- stanfit
+  fit <- rename_pars(fit)
+  
+  return(fit)
+}
+model_based_strong_ties_default <- function(weights, sd_diff = 0 , min_diff=2 , model_backend="rstan", normal_model_base, skewnormal_model_base, poisson_model_base, poisson_model_label){
+  
+  #sort weights
+  weights <- sort(weights)
+  
+  #store outputs
+  df_models <- data.frame()
+  
+  #start off (model has to beat this)
+  max_density = -999999
+  
+  #### Step 1: check for evidence of skewness
+  
+  #fit a model with a normal distribution
+  fit.normal <- fit_stan_model(normal_model_base,'weights ~ 1', data.frame(weights=weights), family="normal")
+  #fit a model with a skew normal distribution
+  fit.skew <- fit_stan_model (skewnormal_model_base,'weights ~ 1', data.frame(weights=weights), family=skew_normal())
+  
+  #compare models using leave-one-out cross validation
+  loo_res<- suppressWarnings(loo::loo_compare(loo(fit.skew),loo(fit.normal) ) )
+  
+  #### Step 2: If there is skewness, try to classify which weights are outside expectation using the normal distribution
+  
+  #check to see if there is sufficient evidence for 'skew': if the (top model is the skew model) & (lower bound of the difference between models if greater than 0) & (the min difference is above a threshold: min_diff) then there is evidence of a skew
+  if(rownames(loo_res)[1]=="fit.skew" & (loo_res[2,1] + sd_diff*loo_res[2,2] < 0 ) & (loo_res[2,1]<=(-min_diff))  ){  #   min_diff makes it more conservative...
+    
+    #loop through the data and try assigning different strong tie options (#start with largest weight, assign it as a strong tie, then move on and assign the first two weights as strong ties, ... etc)
+    for (s in 0:round(length(weights)/2) ){ #only look at the highest half of the weights
+      
+      #for the first model no weights are given strong tie status
+      if(s==0){
+        
+        #all weights are not strong ties
+        weight_labels <- rep(0,length(weights))
+        
+        #fit a normal distribution
+        fit.skew2 <- fit_stan_model(poisson_model_base,'weights ~ 1', data.frame(weights=weights), family='poisson')
+        
+        loo_labels = suppressWarnings(loo(fit.skew2))
+        
+        #for all other models assign weights as either strong ties or not
+      } else {
+        
+        #what weights to set as strong ties
+        l=length(weights)-s #top weight
+        
+        weight_labels<-c(rep(0,l),seq(1,s,by=1) )
+        
+        #fit a skewed normal
+        fit.skew2 <- fit_stan_model(poisson_model_label,'weights ~ 1 + label', data.frame(weights=weights,label=as.factor(weight_labels) ), family='poisson')
+        
+        loo_labels = suppressWarnings(loo(fit.skew2))
+        
+      }
+      
+      #extract the loo
+      loo_labels = suppressWarnings(loo(fit.skew2))
+ 
+      #if the model beats the last model save it as the best
+      if(loo_labels$estimates[1,1]>max_density& loo_labels$estimates[1,1]-max_density > min_diff ){ # min_diff makes the choice more conservative: 
+        
+        fit_save = fit.skew2
+        label_save = weight_labels
+        max_density=loo_labels$estimates[1,1]
+        
+        #save all the results
+        df_models <-  dplyr::bind_rows(df_models, data.frame(strongTies = s, elpd = loo_labels$estimates[1,1], looic = loo_labels$estimates[3,1]))
+        
+        #if the model is not better stop the procedure  
+      } else {
+        df_models <-  dplyr::bind_rows(df_models, data.frame(strongTies = s, elpd = loo_labels$estimates[1,1], looic = loo_labels$estimates[3,1]))
+        break
+      }
+    }
+    
+    return( data.frame(weight=weights, strong = as.numeric(label_save>0) ))
+    
+  } else {
+    
+    return(data.frame(weight=weights, strong = rep(0, length(weights)) ))
+    
+  }
+}
+
+```
+
+  # The function with PRIORS SET TO NORMAL ON FIXED EFFECTS (CLASS b), so only poisson with labels
+
+```{r}
+build_stan_model <- function(formula,df_weights, family){
+  
+  #for normal and skew normal add priors
+  
+  if(family=="normal" ) {
+    
+    my_priors<-get_prior( bf(weights~1 ), data=data.frame(weights=(weights)), family = "normal")
+    
+    #use brm to create the stan code and data for the model
+    scode <- make_stancode(formula, df_weights, family = family , prior =my_priors)
+    
+  } else if (family == "skew_normal") {
+    
+    my_priors<-get_prior( bf(weights~1 ) , data=data.frame(weights=(weights)), family = "skew_normal" )
+    
+    #use brm to create the stan code and data for the model
+    scode <- make_stancode(formula, df_weights, family = family, prior =my_priors ) 
+    
+  } else if (family == "poisson") {
+    
+    if(formula =='weights ~ 1 + label'){
+      
+      df_weights$label<-as.factor(df_weights$label)
+      
+      #use brm to create the stan code and data for the model
+      scode <- make_stancode(formula, df_weights, family = family, prior=set_prior ("normal(0,1)",class="b")) # 
+      
+    }else{
+      
+      #get default priors from brms
+      my_priors<-get_prior( bf(weights~1 ) , data=df_weights, family = "poisson" )
+      
+      #use brm to create the stan code and data for the model
+      scode <- make_stancode(formula, df_weights, family = family, prior= my_priors) #
+      
+    }
+    
+  } else {
+    
+    print('unsupported model family used')
+  }
+  
+  #create the stan model
+  model <- stan_model(model_code=scode)
+  
+  return(model)
+}
+
+## Build models.
+#choose some weights to test the model on:
+weights <- c(2,1,0,4,2,2,2,1,1,3,8) #can be anything, just need the variable names
+
+#add arbitrary labels (this is used just to build the model)
+weight_labels <- as.factor(rep(c(0,1),length(weights))) 
+
+#build and compile all base models (this saves time when running the models!)
+normal_model_base <- build_stan_model('weights ~ 1', data.frame(weights=weights),"normal")
+skewnormal_model_base <- build_stan_model('weights ~ 1', data.frame(weights=weights), "skew_normal")
+poisson_model_base <- build_stan_model('weights ~ 1', data.frame(weights=weights), "poisson")
+poisson_model_label <- build_stan_model('weights ~ 1 + label', data.frame(weights=weights, label=weight_labels), "poisson")
+
+#fit the base model to data
+fit_stan_model <- function(model, formula, df_weights, family){
+  
+  #get the data into rstan format
+  sdata <- make_standata(formula, df_weights )
+  
+  #fit the model to the data
+  stanfit <- suppressWarnings(rstan::sampling(object = model, data = sdata, refresh = 0, chains=1))
+  
+  # feed the Stan model back into a brms model
+  
+  fit <- brm(formula, df_weights, empty = TRUE, family = family)
+  fit$fit <- stanfit
+  fit <- rename_pars(fit)
+  
+  return(fit)
+}
+model_based_strong_ties_b <- function(weights, sd_diff = 0 , min_diff=2 , model_backend="rstan", normal_model_base, skewnormal_model_base, poisson_model_base, poisson_model_label){
+  
+  #sort weights
+  weights <- sort(weights)
+  
+  #store outputs
+  df_models <- data.frame()
+  
+  #start off (model has to beat this)
+  max_density = -999999
+  
+  #### Step 1: check for evidence of skewness
+  
+  #fit a model with a normal distribution
+  fit.normal <- fit_stan_model(normal_model_base,'weights ~ 1', data.frame(weights=weights), family="normal")
+  #fit a model with a skew normal distribution
+  fit.skew <- fit_stan_model (skewnormal_model_base,'weights ~ 1', data.frame(weights=weights), family=skew_normal())
+  
+  #compare models using leave-one-out cross validation
+  loo_res<- suppressWarnings(loo::loo_compare(loo(fit.skew),loo(fit.normal) ) )
+  
+  #### Step 2: If there is skewness, try to classify which weights are outside expectation using the normal distribution
+  
+  #check to see if there is sufficient evidence for 'skew': if the (top model is the skew model) & (lower bound of the difference between models if greater than 0) & (the min difference is above a threshold: min_diff) then there is evidence of a skew
+  if(rownames(loo_res)[1]=="fit.skew" & (loo_res[2,1] + sd_diff*loo_res[2,2] < 0 ) & (loo_res[2,1]<=(-min_diff))  ){  #   min_diff makes it more conservative...
+    
+    #loop through the data and try assigning different strong tie options (#start with largest weight, assign it as a strong tie, then move on and assign the first two weights as strong ties, ... etc)
+    for (s in 0:round(length(weights)/2) ){ #only look at the highest half of the weights
+      
+      #for the first model no weights are given strong tie status
+      if(s==0){
+        
+        #all weights are not strong ties
+        weight_labels <- rep(0,length(weights))
+        
+        #fit a normal distribution
+        fit.skew2 <- fit_stan_model(poisson_model_base,'weights ~ 1', data.frame(weights=weights), family='poisson')
+        
+        loo_labels = suppressWarnings(loo(fit.skew2))
+        
+        #for all other models assign weights as either strong ties or not
+      } else {
+        
+        #what weights to set as strong ties
+        l=length(weights)-s #top weight
+        
+        weight_labels<-c(rep(0,l),seq(1,s,by=1) )
+        
+        #fit a skewed normal
+        fit.skew2 <- fit_stan_model(poisson_model_label,'weights ~ 1 + label', data.frame(weights=weights,label=as.factor(weight_labels) ), family='poisson')
+        
+        loo_labels = suppressWarnings(loo(fit.skew2))
+        
+      }
+      
+      #extract the loo
+      loo_labels = suppressWarnings(loo(fit.skew2))
+
+      #if the model beats the last model save it as the best
+      if(loo_labels$estimates[1,1]>max_density& loo_labels$estimates[1,1]-max_density > min_diff ){ # min_diff makes the choice more conservative: 
+        
+        fit_save = fit.skew2
+        label_save = weight_labels
+        max_density=loo_labels$estimates[1,1]
+        
+        #save all the results
+        df_models <-  dplyr::bind_rows(df_models, data.frame(strongTies = s, elpd = loo_labels$estimates[1,1], looic = loo_labels$estimates[3,1]))
+        
+        #if the model is not better stop the procedure  
+      } else {
+        df_models <-  dplyr::bind_rows(df_models, data.frame(strongTies = s, elpd = loo_labels$estimates[1,1], looic = loo_labels$estimates[3,1]))
+        break
+      }
+    }
+    
+    return( data.frame(weight=weights, strong = as.numeric(label_save>0) ))
+    
+  } else {
+    
+    return(data.frame(weight=weights, strong = rep(0, length(weights)) ))
+    
+  }
+}
+
+```
+
+  # The function with PRIORS SET TO NORMAL ON INTERCEPT 
+
+```{r}
+build_stan_model <- function(formula,df_weights, family){
+  
+  #for normal and skew normal add priors
+  
+  if(family=="normal" ) {
+    
+    #use brm to create the stan code and data for the model
+    scode <- make_stancode(formula, df_weights, family = family , prior=set_prior ("normal(0,1)",class="Intercept"))
+    
+  } else if (family == "skew_normal") {
+    
+    #use brm to create the stan code and data for the model
+    scode <- make_stancode(formula, df_weights, family = family, prior=set_prior ("normal(0,1)",class="Intercept")) 
+    
+  } else if (family == "poisson") {
+    
+    if(formula =='weights ~ 1 + label'){
+      
+      df_weights$label<-as.factor(df_weights$label)
+      
+      #use brm to create the stan code and data for the model
+      scode <- make_stancode(formula, df_weights, family = family, prior=set_prior ("normal(0,1)",class="Intercept")) 
+      
+    }else{
+      
+      #use brm to create the stan code and data for the model
+      scode <- make_stancode(formula, df_weights, family = family, prior=set_prior ("normal(0,1)",class="Intercept"))
+      
+    }
+    
+  } else {
+    
+    print('unsupported model family used')
+  }
+  
+  #create the stan model
+  model <- stan_model(model_code=scode)
+  
+  return(model)
+}
+
+## Build models.
+#choose some weights to test the model on:
+weights <- c(2,1,0,4,2,2,2,1,1,3,8) #can be anything, just need the variable names
+
+#add arbitrary labels (this is used just to build the model)
+weight_labels <- as.factor(rep(c(0,1),length(weights))) 
+
+#build and compile all base models (this saves time when running the models!)
+normal_model_base <- build_stan_model('weights ~ 1', data.frame(weights=weights),"normal")
+skewnormal_model_base <- build_stan_model('weights ~ 1', data.frame(weights=weights), "skew_normal")
+poisson_model_base <- build_stan_model('weights ~ 1', data.frame(weights=weights), "poisson")
+poisson_model_label <- build_stan_model('weights ~ 1 + label', data.frame(weights=weights, label=weight_labels), "poisson")
+
+#fit the base model to data
+fit_stan_model <- function(model, formula, df_weights, family){
+  
+  #get the data into rstan format
+  sdata <- make_standata(formula, df_weights )
+  
+  #fit the model to the data
+  stanfit <- suppressWarnings(rstan::sampling(object = model, data = sdata, refresh = 0, chains=1))
+  
+  # feed the Stan model back into a brms model
+  fit <- brm(formula, df_weights, empty = TRUE, family = family)
+  fit$fit <- stanfit
+  fit <- rename_pars(fit)
+  
+  return(fit)
+}
+model_based_strong_ties_inter <- function(weights, sd_diff = 0 , min_diff=2 , model_backend="rstan", normal_model_base, skewnormal_model_base, poisson_model_base, poisson_model_label){
+  
+  #sort weights
+  weights <- sort(weights)
+  
+  #store outputs
+  df_models <- data.frame()
+  
+  #start off (model has to beat this)
+  max_density = -999999
+  
+  #### Step 1: check for evidence of skewness
+  
+  #fit a model with a normal distribution
+  fit.normal <- fit_stan_model(normal_model_base,'weights ~ 1', data.frame(weights=weights), family="normal")
+  
+  #fit a model with a skew normal distribution
+  fit.skew <- fit_stan_model (skewnormal_model_base,'weights ~ 1', data.frame(weights=weights), family=skew_normal())
+  
+  #compare models using leave-one-out cross validation
+  loo_res<- suppressWarnings(loo::loo_compare(loo(fit.skew),loo(fit.normal) ) )
+  
+  #### Step 2: If there is skewness, try to classify which weights are outside expectation using the normal distribution
+  
+  #check to see if there is sufficient evidence for 'skew': if the (top model is the skew model) & (lower bound of the difference between models if greater than 0) & (the min difference is above a threshold: min_diff) then there is evidence of a skew
+  if(rownames(loo_res)[1]=="fit.skew" & (loo_res[2,1] + sd_diff*loo_res[2,2] < 0 ) & (loo_res[2,1]<=(-min_diff))  ){  #   min_diff makes it more conservative...
+    
+    #loop through the data and try assigning different strong tie options (#start with largest weight, assign it as a strong tie, then move on and assign the first two weights as strong ties, ... etc)
+    for (s in 0:round(length(weights)/2) ){ #only look at the highest half of the weights
+      
+      #for the first model no weights are given strong tie status
+      if(s==0){
+        
+        #all weights are not strong ties
+        weight_labels <- rep(0,length(weights))
+        
+        #fit a normal distribution
+        fit.skew2 <- fit_stan_model(poisson_model_base,'weights ~ 1', data.frame(weights=weights), family='poisson')
+        
+        loo_labels = suppressWarnings(loo(fit.skew2))
+        
+        #for all other models assign weights as either strong ties or not
+      } else {
+        
+        #what weights to set as strong ties
+        l=length(weights)-s #top weight
+        
+        weight_labels<-c(rep(0,l),seq(1,s,by=1) )
+        
+        #fit a skewed normal
+        fit.skew2 <- fit_stan_model(poisson_model_label,'weights ~ 1 + label', data.frame(weights=weights,label=as.factor(weight_labels) ), family='poisson')
+        
+        loo_labels = suppressWarnings(loo(fit.skew2))
+        
+      }
+      
+      #extract the loo
+      loo_labels = suppressWarnings(loo(fit.skew2))
+      
+      #if the model beats the last model save it as the best
+      if(loo_labels$estimates[1,1]>max_density& loo_labels$estimates[1,1]-max_density > min_diff ){ # min_diff makes the choice more conservative: 
+        
+        fit_save = fit.skew2
+        label_save = weight_labels
+        max_density=loo_labels$estimates[1,1]
+        
+        #save all the results
+        df_models <-  dplyr::bind_rows(df_models, data.frame(strongTies = s, elpd = loo_labels$estimates[1,1], looic = loo_labels$estimates[3,1]))
+        
+        #if the model is not better stop the procedure  
+      } else {
+        df_models <-  dplyr::bind_rows(df_models, data.frame(strongTies = s, elpd = loo_labels$estimates[1,1], looic = loo_labels$estimates[3,1]))
+        break
+      }
+    }
+    
+    return( data.frame(weight=weights, strong = as.numeric(label_save>0) ))
+    
+  } else {
+    
+    return(data.frame(weight=weights, strong = rep(0, length(weights)) )) 
+    
+  }
+}
+
+```
+
